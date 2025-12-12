@@ -1,0 +1,76 @@
+name: Deploy Frontend to S3
+
+on:
+  push:
+    branches:
+      - production
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'vite.config.js'
+      - 'package.json'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Get S3 Bucket Name from Terraform
+        id: get-s3-bucket
+        run: |
+          cd terraform
+          terraform init -input=false
+          S3_BUCKET=$(terraform output -raw s3_bucket_name 2>/dev/null || echo "onlyvoices.ai")
+          echo "bucket_name=$S3_BUCKET" >> $GITHUB_OUTPUT
+          echo "S3 Bucket: $S3_BUCKET"
+          cd ..
+
+      - name: Sync files to S3
+        run: |
+          aws s3 sync dist/ s3://${{ steps.get-s3-bucket.outputs.bucket_name }} --delete
+
+      - name: Get CloudFront Distribution ID
+        id: get-cloudfront-id
+        run: |
+          cd terraform
+          DIST_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
+          if [ -z "$DIST_ID" ]; then
+            echo "⚠️  CloudFront distribution not found. Skipping cache invalidation."
+            echo "distribution_id=" >> $GITHUB_OUTPUT
+          else
+            echo "distribution_id=$DIST_ID" >> $GITHUB_OUTPUT
+            echo "CloudFront Distribution ID: $DIST_ID"
+          fi
+          cd ..
+
+      - name: Invalidate CloudFront Cache
+        if: steps.get-cloudfront-id.outputs.distribution_id != ''
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.get-cloudfront-id.outputs.distribution_id }} \
+            --paths "/*"
+

@@ -1,0 +1,222 @@
+name: Deploy All
+
+on:
+  push:
+    branches:
+      - production
+  workflow_dispatch:
+
+jobs:
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.6.0'
+
+      - name: Get S3 Bucket Name from Terraform
+        id: get-s3-bucket
+        run: |
+          cd terraform
+          terraform init -input=false
+          S3_BUCKET=$(terraform output -raw s3_bucket_name 2>/dev/null || echo "onlyvoices.ai")
+          echo "bucket_name=$S3_BUCKET" >> $GITHUB_OUTPUT
+          echo "S3 Bucket: $S3_BUCKET"
+          cd ..
+
+      - name: Sync files to S3
+        run: |
+          aws s3 sync dist/ s3://${{ steps.get-s3-bucket.outputs.bucket_name }} --delete
+
+      - name: Get CloudFront Distribution ID
+        id: get-cloudfront-id
+        run: |
+          cd terraform
+          DIST_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
+          if [ -z "$DIST_ID" ]; then
+            echo "⚠️  CloudFront distribution not found. Skipping cache invalidation."
+            echo "distribution_id=" >> $GITHUB_OUTPUT
+          else
+            echo "distribution_id=$DIST_ID" >> $GITHUB_OUTPUT
+            echo "CloudFront Distribution ID: $DIST_ID"
+          fi
+          cd ..
+
+      - name: Invalidate CloudFront Cache
+        if: steps.get-cloudfront-id.outputs.distribution_id != ''
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.get-cloudfront-id.outputs.distribution_id }} \
+            --paths "/*"
+
+  deploy-lambda:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Prepare Lambda Package
+        run: |
+          echo "📦 Preparing Lambda package..."
+          mkdir -p lambda-package/api lambda-package/utils
+          cp api/api.js lambda-package/api/
+          cp api/multipartParser.js lambda-package/api/ 2>/dev/null || true
+          cp utils/*.js lambda-package/utils/
+
+      - name: Create Lambda Layer
+        run: |
+          echo "📦 Creating Lambda layer..."
+          mkdir -p lambda-layer/nodejs
+          echo '{"name":"onlyvoices-dependencies","version":"1.0.0"}' > lambda-layer/nodejs/package.json
+          cd lambda-layer
+          zip -r ../lambda-layer.zip . > /dev/null
+          cd ..
+
+      - name: Create Lambda Package Zip
+        run: |
+          echo "📦 Creating Lambda package zip..."
+          cd lambda-package
+          zip -r ../lambda-package.zip . > /dev/null
+          cd ..
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.6.0'
+
+      - name: Terraform Init
+        run: |
+          cd terraform
+          terraform init -input=false
+
+      - name: Terraform Plan
+        run: |
+          cd terraform
+          terraform plan \
+            -var="stage=prod" \
+            -var="aws_region=us-east-1"
+        continue-on-error: true
+
+      - name: Terraform Apply
+        run: |
+          cd terraform
+          terraform apply -auto-approve \
+            -var="stage=prod" \
+            -var="aws_region=us-east-1"
+
+      - name: Output Lambda Function Info
+        run: |
+          cd terraform
+          terraform output
+
+      - name: Get API Gateway ID
+        id: get-api-gateway-id
+        run: |
+          cd terraform
+          API_GATEWAY_ID=$(terraform output -raw api_gateway_id)
+          echo "api_gateway_id=$API_GATEWAY_ID" >> $GITHUB_OUTPUT
+          echo "API Gateway ID: $API_GATEWAY_ID"
+          cd ..
+
+      - name: Get CloudFront Distribution ID
+        id: get-cloudfront-id
+        run: |
+          cd terraform
+          DIST_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
+          if [ -z "$DIST_ID" ]; then
+            echo "⚠️  CloudFront distribution not found. Skipping CloudFront update."
+            echo "distribution_id=" >> $GITHUB_OUTPUT
+          else
+            echo "distribution_id=$DIST_ID" >> $GITHUB_OUTPUT
+            echo "CloudFront Distribution ID: $DIST_ID"
+          fi
+          cd ..
+
+      - name: Update CloudFront API Gateway Origin
+        if: steps.get-cloudfront-id.outputs.distribution_id != ''
+        run: |
+          echo "Updating CloudFront to use API Gateway: ${{ steps.get-api-gateway-id.outputs.api_gateway_id }}"
+          
+          DIST_ID="${{ steps.get-cloudfront-id.outputs.distribution_id }}"
+          API_GATEWAY_ID="${{ steps.get-api-gateway-id.outputs.api_gateway_id }}"
+          
+          # Get current CloudFront config
+          CONFIG=$(aws cloudfront get-distribution-config --id "$DIST_ID")
+          ETAG=$(echo "$CONFIG" | jq -r '.ETag')
+          DIST_CONFIG=$(echo "$CONFIG" | jq '.DistributionConfig')
+          
+          # Extract current API Gateway domain
+          CURRENT_DOMAIN=$(echo "$DIST_CONFIG" | jq -r '.Origins.Items[] | select(.Id == "api-gateway-origin") | .DomainName')
+          NEW_DOMAIN="${API_GATEWAY_ID}.execute-api.us-east-1.amazonaws.com"
+          
+          echo "Current API Gateway origin: $CURRENT_DOMAIN"
+          echo "New API Gateway origin: $NEW_DOMAIN"
+          
+          if [ "$CURRENT_DOMAIN" != "$NEW_DOMAIN" ] || [ "$(echo "$DIST_CONFIG" | jq -r '.Origins.Items[] | select(.Id == "api-gateway-origin") | .OriginPath')" != "/prod" ]; then
+            echo "Updating API Gateway origin..."
+            
+            # Update the origin
+            UPDATED_CONFIG=$(echo "$DIST_CONFIG" | jq \
+              --arg domain "$NEW_DOMAIN" \
+              --arg path "/prod" \
+              '.Origins.Items[] |= if .Id == "api-gateway-origin" then .DomainName = $domain | .OriginPath = $path else . end')
+            
+            # Save to temp file
+            TEMP_FILE=$(mktemp)
+            echo "$UPDATED_CONFIG" > "$TEMP_FILE"
+            
+            # Update CloudFront
+            aws cloudfront update-distribution \
+              --id "$DIST_ID" \
+              --distribution-config "file://$TEMP_FILE" \
+              --if-match "$ETAG"
+            
+            rm "$TEMP_FILE"
+            echo "✅ CloudFront distribution updated!"
+          else
+            echo "✅ API Gateway origin is already correct"
+          fi
+
+      - name: Invalidate CloudFront Cache
+        if: steps.get-cloudfront-id.outputs.distribution_id != ''
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.get-cloudfront-id.outputs.distribution_id }} \
+            --paths "/api/*"
+

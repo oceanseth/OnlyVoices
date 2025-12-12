@@ -1,0 +1,76 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Python virtual environment
+venv/
+tortoise_env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Serverless Framework
+.serverless/
+.serverless_plugins/
+
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+.env.local.backup.*
+*.pem
+*.key
+service-account.json
+
+# AWS
+.aws-sam/
+samconfig.toml
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Build artifacts
+dist/
+build/
+*.zip
+
+# SAM build artifacts
+.aws-sam/
+samconfig.toml.bak
+
+# Lambda package (generated)
+lambda-package
+lambda-package.zip
+lambda-package.backup
+lambda-layer
+lambda-layer.zip
+.lambda-cache
+.layer-hash
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
