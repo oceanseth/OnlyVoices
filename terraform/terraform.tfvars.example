@@ -1,0 +1,7 @@
+aws_region         = "us-east-1"
+stage              = "prod"
+domain_name        = "onlyvoices.ai"
+acm_certificate_arn = "arn:aws:acm:us-east-1:YOUR_ACCOUNT_ID:certificate/YOUR_CERT_ID"
+lambda_package_path = "../lambda-package.zip"
+lambda_layer_path   = "../lambda-layer.zip"
+
