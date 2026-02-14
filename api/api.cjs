@@ -83,6 +83,32 @@ async function getUserElevenLabsKey(userId) {
     }
 }
 
+// Helper function to get Stripe client (lazy-loaded from SSM)
+let stripeClient = null;
+async function getStripeClient() {
+    if (stripeClient) return stripeClient;
+    try {
+        // Try SSM parameter first
+        const secret = await secretsManager.getSecret('stripe-secret-key', 'prod');
+        const key = typeof secret === 'string' ? secret : secret?.key || secret?.apiKey;
+        if (key) {
+            const Stripe = require('stripe');
+            stripeClient = new Stripe(key);
+            return stripeClient;
+        }
+        // Try env variable
+        if (process.env.STRIPE_SECRET_KEY) {
+            const Stripe = require('stripe');
+            stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
+            return stripeClient;
+        }
+        return null;
+    } catch (error) {
+        console.warn('Stripe not available:', error.message);
+        return null;
+    }
+}
+
 // Helper function to check rate limit
 function checkRateLimit(userId, endpoint = 'default', maxRequests = 100) {
     const identifier = `${userId}:${endpoint}`;
@@ -472,6 +498,260 @@ exports.handler = async (event, context) => {
                 },
                 body: JSON.stringify({ error: 'Failed to train voice', message: error.message })
             };
+        }
+    }
+
+    // ===== PAYMENT ENDPOINTS (Stripe Connect) =====
+
+    // POST /payments/connect-account - Create Stripe Connect account for creator
+    if (path === '/payments/connect-account' && method === 'POST') {
+        const user = await verifyAuth(event);
+        if (!user) {
+            return { statusCode: 401, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Unauthorized' }) };
+        }
+
+        try {
+            const stripe = await getStripeClient();
+            if (!stripe) {
+                return { statusCode: 503, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Stripe not configured' }) };
+            }
+
+            await firebaseInitializer.initialize();
+            const admin = require('firebase-admin');
+            const db = admin.firestore();
+            const userDoc = await db.collection('users').doc(user.uid).get();
+            const userData = userDoc.exists ? userDoc.data() : {};
+
+            let stripeAccountId = userData.stripeAccountId;
+
+            if (!stripeAccountId) {
+                const account = await stripe.accounts.create({
+                    type: 'express',
+                    email: user.email,
+                    metadata: { userId: user.uid },
+                    capabilities: {
+                        card_payments: { requested: true },
+                        transfers: { requested: true },
+                    },
+                });
+                stripeAccountId = account.id;
+                await db.collection('users').doc(user.uid).set({ stripeAccountId }, { merge: true });
+            }
+
+            const baseUrl = event.headers?.origin || event.headers?.Origin || 'https://onlyvoices.ai';
+            const accountLink = await stripe.accountLinks.create({
+                account: stripeAccountId,
+                refresh_url: `${baseUrl}/settings?stripe=retry`,
+                return_url: `${baseUrl}/settings?stripe=success`,
+                type: 'account_onboarding',
+            });
+
+            return {
+                statusCode: 200,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: accountLink.url })
+            };
+        } catch (error) {
+            console.error('Stripe Connect error:', error);
+            return { statusCode: 500, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: error.message }) };
+        }
+    }
+
+    // GET /payments/connect-dashboard - Get Stripe dashboard link for creator
+    if (path === '/payments/connect-dashboard' && method === 'GET') {
+        const user = await verifyAuth(event);
+        if (!user) {
+            return { statusCode: 401, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Unauthorized' }) };
+        }
+
+        try {
+            const stripe = await getStripeClient();
+            if (!stripe) {
+                return { statusCode: 503, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Stripe not configured' }) };
+            }
+
+            await firebaseInitializer.initialize();
+            const admin = require('firebase-admin');
+            const db = admin.firestore();
+            const userDoc = await db.collection('users').doc(user.uid).get();
+            const stripeAccountId = userDoc.data()?.stripeAccountId;
+
+            if (!stripeAccountId) {
+                return { statusCode: 400, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Stripe account not connected' }) };
+            }
+
+            const loginLink = await stripe.accounts.createLoginLink(stripeAccountId);
+            return {
+                statusCode: 200,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: loginLink.url })
+            };
+        } catch (error) {
+            console.error('Stripe dashboard link error:', error);
+            return { statusCode: 500, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: error.message }) };
+        }
+    }
+
+    // POST /payments/checkout - Create checkout session for a voice reading
+    if (path === '/payments/checkout' && method === 'POST') {
+        const user = await verifyAuth(event);
+        if (!user) {
+            return { statusCode: 401, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Unauthorized' }) };
+        }
+
+        try {
+            const stripe = await getStripeClient();
+            if (!stripe) {
+                return { statusCode: 503, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Stripe not configured' }) };
+            }
+
+            const body = parseBody(event);
+            const { listingId, creatorId } = body;
+
+            if (!listingId || !creatorId) {
+                return { statusCode: 400, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'listingId and creatorId required' }) };
+            }
+
+            await firebaseInitializer.initialize();
+            const admin = require('firebase-admin');
+            const db = admin.firestore();
+
+            const listingDoc = await db.collection('listings').doc(listingId).get();
+            if (!listingDoc.exists) {
+                return { statusCode: 404, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Listing not found' }) };
+            }
+
+            const listing = listingDoc.data();
+            const creatorDoc = await db.collection('users').doc(creatorId).get();
+            const creatorStripeId = creatorDoc.data()?.stripeAccountId;
+
+            if (!creatorStripeId) {
+                return { statusCode: 400, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Creator has not connected Stripe' }) };
+            }
+
+            const price = listing.price || 500; // cents
+            const platformFee = Math.round(price * 0.20); // 20% platform fee
+
+            const baseUrl = event.headers?.origin || event.headers?.Origin || 'https://onlyvoices.ai';
+            const session = await stripe.checkout.sessions.create({
+                payment_method_types: ['card'],
+                line_items: [{
+                    price_data: {
+                        currency: 'usd',
+                        product_data: {
+                            name: listing.name || 'Voice Reading',
+                            description: `Voice reading by ${listing.creatorName || 'Creator'}`,
+                        },
+                        unit_amount: price,
+                    },
+                    quantity: 1,
+                }],
+                mode: 'payment',
+                payment_intent_data: {
+                    application_fee_amount: platformFee,
+                    transfer_data: { destination: creatorStripeId },
+                },
+                metadata: {
+                    listingId,
+                    creatorId,
+                    buyerId: user.uid,
+                },
+                success_url: `${baseUrl}/marketplace?purchase=success`,
+                cancel_url: `${baseUrl}/marketplace?purchase=cancelled`,
+            });
+
+            return {
+                statusCode: 200,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId: session.id, url: session.url })
+            };
+        } catch (error) {
+            console.error('Checkout error:', error);
+            return { statusCode: 500, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: error.message }) };
+        }
+    }
+
+    // GET /payments/earnings - Get creator earnings summary
+    if (path === '/payments/earnings' && method === 'GET') {
+        const user = await verifyAuth(event);
+        if (!user) {
+            return { statusCode: 401, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Unauthorized' }) };
+        }
+
+        try {
+            await firebaseInitializer.initialize();
+            const admin = require('firebase-admin');
+            const db = admin.firestore();
+
+            const txSnap = await db.collection('users').doc(user.uid).collection('transactions')
+                .orderBy('createdAt', 'desc').limit(100).get();
+
+            const transactions = txSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            const totalEarnings = transactions.reduce((sum, tx) => sum + (tx.creatorAmount || 0), 0);
+
+            return {
+                statusCode: 200,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ totalEarnings, transactions })
+            };
+        } catch (error) {
+            console.error('Earnings error:', error);
+            return { statusCode: 500, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: error.message }) };
+        }
+    }
+
+    // ===== USER PROFILE ENDPOINTS =====
+
+    // GET /user/profile
+    if (path === '/user/profile' && method === 'GET') {
+        const user = await verifyAuth(event);
+        if (!user) {
+            return { statusCode: 401, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Unauthorized' }) };
+        }
+
+        try {
+            await firebaseInitializer.initialize();
+            const admin = require('firebase-admin');
+            const db = admin.firestore();
+            const userDoc = await db.collection('users').doc(user.uid).get();
+            return {
+                statusCode: 200,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify(userDoc.exists ? userDoc.data() : {})
+            };
+        } catch (error) {
+            return { statusCode: 500, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: error.message }) };
+        }
+    }
+
+    // PUT /user/profile
+    if (path === '/user/profile' && method === 'PUT') {
+        const user = await verifyAuth(event);
+        if (!user) {
+            return { statusCode: 401, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Unauthorized' }) };
+        }
+
+        try {
+            const body = parseBody(event);
+            const allowedFields = ['displayName', 'bio', 'username', 'pricePerReading', 'isCreator', 'photoURL'];
+            const updates = {};
+            for (const key of allowedFields) {
+                if (body[key] !== undefined) updates[key] = body[key];
+            }
+
+            await firebaseInitializer.initialize();
+            const admin = require('firebase-admin');
+            const db = admin.firestore();
+            updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+            await db.collection('users').doc(user.uid).set(updates, { merge: true });
+
+            return {
+                statusCode: 200,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: true })
+            };
+        } catch (error) {
+            return { statusCode: 500, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: error.message }) };
         }
     }
 
