@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   const isProduction = mode === 'production';
@@ -10,13 +11,14 @@ export default defineConfig(({ mode }) => {
 
   if (isProduction) {
     buildConfig.esbuild = {
-      drop: ['console', 'debugger']
+      drop: ['debugger']
     };
   }
 
   return {
     root: '.',
     publicDir: 'public',
+    plugins: [react()],
     build: buildConfig,
     server: {
       port: 3000,
@@ -25,7 +27,6 @@ export default defineConfig(({ mode }) => {
       fs: {
         strict: false
       },
-      // Proxy API requests to local server in dev, production API in build
       proxy: {
         '/api': {
           target: process.env.VITE_API_URL || 'http://localhost:3001',
@@ -33,7 +34,12 @@ export default defineConfig(({ mode }) => {
           secure: false
         }
       }
+    },
+    test: {
+      globals: true,
+      environment: 'jsdom',
+      setupFiles: './src/test/setup.js',
+      css: true,
     }
   };
 });
-

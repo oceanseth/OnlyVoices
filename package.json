@@ -1,26 +1,42 @@
 {
   "name": "onlyvoices",
   "version": "1.0.0",
-  "description": "OnlyVoices - Your Audiobooks, Your Voices",
+  "description": "OnlyVoices - Clone Your Voice. Share Your Sound.",
+  "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:api\"",
     "dev:vite": "vite",
-    "dev:api": "cross-env IS_OFFLINE=true STAGE=local nodemon --watch server --watch api --watch utils --ext js server/local-api-server.js",
+    "dev:api": "cross-env IS_OFFLINE=true STAGE=local nodemon --watch server --watch api --watch utils --ext cjs,js server/local-api-server.cjs",
     "build": "vite build",
     "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "deploy:frontend": "npm run build && aws s3 sync dist/ s3://onlyvoices.ai --delete"
   },
   "dependencies": {
+    "@stripe/react-stripe-js": "^5.6.0",
+    "@stripe/stripe-js": "^8.7.0",
     "aws-sdk": "^2.1693.0",
     "firebase": "^12.6.0",
-    "firebase-admin": "^13.6.0"
+    "firebase-admin": "^13.6.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitejs/plugin-react": "^5.1.4",
     "concurrently": "^9.2.1",
     "cors": "^2.8.5",
     "cross-env": "^10.1.0",
     "express": "^4.18.2",
+    "happy-dom": "^20.6.1",
+    "jsdom": "^28.0.0",
     "nodemon": "^3.1.11",
-    "vite": "^5.0.0"
+    "vite": "^5.0.0",
+    "vitest": "^4.0.18"
   }
 }

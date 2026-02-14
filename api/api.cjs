@@ -7,7 +7,7 @@ if (process.env.IS_OFFLINE === 'true' || process.env.STAGE === 'local') {
     console.log('   STAGE:', process.env.STAGE);
     
     try {
-        const { loadLocalEnv, mockSSMForLocal } = require('../local-env-loader');
+        const { loadLocalEnv, mockSSMForLocal } = require('../local-env-loader.cjs');
         loadLocalEnv();
         mockSSMForLocal();
         console.log('   ✓ Local environment loaded');
@@ -17,13 +17,11 @@ if (process.env.IS_OFFLINE === 'true' || process.env.STAGE === 'local') {
     }
 }
 
-const firebaseInitializer = require('../utils/firebaseInit');
-const { ElevenLabsClient } = require('../utils/elevenlabs');
-const { AudibleClient } = require('../utils/audible');
-const { YouTubeAudioExtractor } = require('../utils/youtube');
-const { parseMultipartData } = require('./multipartParser');
-const { SecretsManager } = require('../utils/secretsManager');
-const { rateLimiter } = require('../utils/rateLimiter');
+const firebaseInitializer = require('../utils/firebaseInit.cjs');
+const { ElevenLabsClient } = require('../utils/elevenlabs.cjs');
+const { parseMultipartData } = require('./multipartParser.cjs');
+const { SecretsManager } = require('../utils/secretsManager.cjs');
+const { rateLimiter } = require('../utils/rateLimiter.cjs');
 const AWS = require('aws-sdk');
 
 const sqs = new AWS.SQS({ region: process.env.AWS_REGION || 'us-east-1' });
@@ -181,274 +179,88 @@ exports.handler = async (event, context) => {
         };
     }
 
-    // ===== AUDIBLE ENDPOINTS =====
+    // ===== CONTENT ENDPOINTS =====
 
-    // POST /audible/connect - Connect Audible account
-    if (path === '/audible/connect' && method === 'POST') {
+    // POST /content/render - Render content with voice (replaces old books/render)
+    if (path === '/content/render' && method === 'POST') {
         const user = await verifyAuth(event);
         if (!user) {
             return {
                 statusCode: 401,
-                headers: {
-                    ...headers,
-                    'Content-Type': 'application/json'
-                },
+                headers: { ...headers, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ error: 'Unauthorized' })
             };
         }
 
-        try {
-            const body = parseBody(event);
-            const { username, password } = body;
-
-            if (!username || !password) {
-                return {
-                    statusCode: 400,
-                    headers: {
-                        ...headers,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ error: 'Username and password required' })
-                };
-            }
-
-            // Initialize Audible client with Secrets Manager
-            const secretsManager = new SecretsManager();
-            const audibleClient = new AudibleClient(user.uid, secretsManager);
-            
-            // Authenticate using username/password (device registration)
-            // This will perform device registration and get tokens
-            const authResult = await audibleClient.authenticateWithCredentials(username, password);
-
-            if (!authResult.authenticated) {
-                return {
-                    statusCode: 400,
-                    headers: {
-                        ...headers,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ 
-                        error: 'Failed to authenticate with Audible',
-                        message: authResult.message || 'Authentication failed'
-                    })
-                };
-            }
-
-            // Save connection status to Firestore
-            await firebaseInitializer.initialize();
-            const admin = require('firebase-admin');
-            const db = admin.firestore();
-            await db.collection('users').doc(user.uid).set({
-                audibleConnected: true,
-                audibleUsername: username,
-                // Credentials are stored securely in Secrets Manager, not Firestore
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-
-            return {
-                statusCode: 200,
-                headers: {
-                    ...headers,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    success: true,
-                    message: 'Audible account connected successfully'
-                })
-            };
-        } catch (error) {
-            console.error('Error connecting Audible:', error);
-            return {
-                statusCode: 500,
-                headers: {
-                    ...headers,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ error: 'Failed to connect Audible account', message: error.message })
-            };
-        }
-    }
-
-    // POST /audible/sync - Sync Audible library
-    if (path === '/audible/sync' && method === 'POST') {
-        const user = await verifyAuth(event);
-        if (!user) {
-            return {
-                statusCode: 401,
-                headers: {
-                    ...headers,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ error: 'Unauthorized' })
-            };
-        }
-
-        try {
-            await firebaseInitializer.initialize();
-            const admin = require('firebase-admin');
-            const db = admin.firestore();
-            
-            // Get user's Audible credentials
-            const userDoc = await db.collection('users').doc(user.uid).get();
-            if (!userDoc.exists || !userDoc.data().audibleConnected) {
-                return {
-                    statusCode: 400,
-                    headers: {
-                        ...headers,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ error: 'Audible account not connected' })
-                };
-            }
-
-            // Initialize Audible client and get library
-            const secretsManager = new SecretsManager();
-            const audibleClient = new AudibleClient(user.uid, secretsManager);
-            await audibleClient.initialize();
-            const library = await audibleClient.getLibrary();
-
-            // Save books to Firestore
-            const booksRef = db.collection('users').doc(user.uid).collection('books');
-            const batch = db.batch();
-            
-            for (const book of library.books) {
-                const bookRef = booksRef.doc(book.asin || book.id);
-                batch.set(bookRef, {
-                    ...book,
-                    syncedAt: admin.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
-            }
-
-            await batch.commit();
-
-            return {
-                statusCode: 200,
-                headers: {
-                    ...headers,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    success: true,
-                    message: `Synced ${library.books.length} books`,
-                    booksCount: library.books.length
-                })
-            };
-        } catch (error) {
-            console.error('Error syncing Audible library:', error);
-            return {
-                statusCode: 500,
-                headers: {
-                    ...headers,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ error: 'Failed to sync library', message: error.message })
-            };
-        }
-    }
-
-    // ===== BOOKS ENDPOINTS =====
-
-    // POST /books/render - Render audiobook with voice
-    if (path === '/books/render' && method === 'POST') {
-        const user = await verifyAuth(event);
-        if (!user) {
-            return {
-                statusCode: 401,
-                headers: {
-                    ...headers,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ error: 'Unauthorized' })
-            };
-        }
-
-        // Rate limiting: 10 requests per minute for render jobs
         const rateLimit = checkRateLimit(user.uid, 'render', 10);
         if (!rateLimit.allowed) {
             return {
                 statusCode: 429,
-                headers: {
-                    ...headers,
-                    'Content-Type': 'application/json',
-                    'X-RateLimit-Limit': '10',
-                    'X-RateLimit-Remaining': '0',
-                    'Retry-After': '60'
-                },
-                body: JSON.stringify({ 
-                    error: 'Rate limit exceeded', 
-                    message: 'Too many render requests. Please try again later.',
-                    retryAfter: 60
-                })
+                headers: { ...headers, 'Content-Type': 'application/json', 'Retry-After': '60' },
+                body: JSON.stringify({ error: 'Rate limit exceeded', retryAfter: 60 })
             };
         }
 
         try {
             const body = parseBody(event);
-            const { bookId, voiceId, language } = body;
+            const { contentId, voiceId, language, text } = body;
 
-            if (!bookId || !voiceId) {
+            if (!voiceId || (!contentId && !text)) {
                 return {
                     statusCode: 400,
-                    headers: {
-                        ...headers,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ error: 'Book ID and Voice ID required' })
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ error: 'Voice ID and content (contentId or text) required' })
                 };
             }
 
-            // Get user's ElevenLabs API key
             const elevenLabsKey = await getUserElevenLabsKey(user.uid);
             if (!elevenLabsKey) {
                 return {
                     statusCode: 400,
-                    headers: {
-                        ...headers,
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { ...headers, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ error: 'ElevenLabs API key not configured' })
                 };
             }
 
-            // Get book from Firestore
             await firebaseInitializer.initialize();
             const admin = require('firebase-admin');
             const db = admin.firestore();
-            const bookDoc = await db.collection('users').doc(user.uid).collection('books').doc(bookId).get();
-            
-            if (!bookDoc.exists) {
-                return {
-                    statusCode: 404,
-                    headers: {
-                        ...headers,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ error: 'Book not found' })
-                };
+
+            let renderText = text;
+            let title = 'Custom text';
+
+            if (contentId) {
+                const contentDoc = await db.collection('users').doc(user.uid).collection('content').doc(contentId).get();
+                if (!contentDoc.exists) {
+                    return {
+                        statusCode: 404,
+                        headers: { ...headers, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ error: 'Content not found' })
+                    };
+                }
+                renderText = contentDoc.data().text;
+                title = contentDoc.data().title || 'Untitled';
             }
 
-            const book = bookDoc.data();
-
-            // Create render job in Firestore
             const renderJobRef = await db.collection('users').doc(user.uid).collection('renders').add({
-                bookId,
-                bookTitle: book.title,
+                contentId: contentId || null,
+                title,
                 voiceId,
                 language: language || 'en',
                 status: 'pending',
                 createdAt: admin.firestore.FieldValue.serverTimestamp()
             });
 
-            // Get SQS queue URL from environment or Terraform output
-            const queueUrl = process.env.RENDER_QUEUE_URL || `https://sqs.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${process.env.AWS_ACCOUNT_ID || ''}/onlyvoices-render-jobs-${process.env.STAGE || 'prod'}`;
+            const queueUrl = process.env.RENDER_QUEUE_URL ||
+                `https://sqs.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${process.env.AWS_ACCOUNT_ID || ''}/onlyvoices-render-jobs-${process.env.STAGE || 'prod'}`;
 
-            // Send job to SQS queue
             await sqs.sendMessage({
                 QueueUrl: queueUrl,
                 MessageBody: JSON.stringify({
                     jobId: renderJobRef.id,
                     userId: user.uid,
-                    bookId,
+                    contentId: contentId || null,
+                    text: renderText,
                     voiceId,
                     language: language || 'en'
                 })
@@ -456,25 +268,14 @@ exports.handler = async (event, context) => {
 
             return {
                 statusCode: 200,
-                headers: {
-                    ...headers,
-                    'Content-Type': 'application/json',
-                    'X-RateLimit-Remaining': rateLimit.remaining.toString()
-                },
-                body: JSON.stringify({
-                    success: true,
-                    message: 'Render job queued',
-                    jobId: renderJobRef.id
-                })
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ success: true, jobId: renderJobRef.id })
             };
         } catch (error) {
             console.error('Error starting render:', error);
             return {
                 statusCode: 500,
-                headers: {
-                    ...headers,
-                    'Content-Type': 'application/json'
-                },
+                headers: { ...headers, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ error: 'Failed to start render', message: error.message })
             };
         }

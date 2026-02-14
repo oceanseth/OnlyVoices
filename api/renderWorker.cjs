@@ -1,7 +1,7 @@
 // Lambda worker for processing render jobs from SQS
-const firebaseInitializer = require('../utils/firebaseInit');
-const { ElevenLabsClient } = require('../utils/elevenlabs');
-const { SecretsManager } = require('../utils/secretsManager');
+const firebaseInitializer = require('../utils/firebaseInit.cjs');
+const { ElevenLabsClient } = require('../utils/elevenlabs.cjs');
+const { SecretsManager } = require('../utils/secretsManager.cjs');
 const AWS = require('aws-sdk');
 
 const s3 = new AWS.S3({ region: process.env.AWS_REGION || 'us-east-1' });
