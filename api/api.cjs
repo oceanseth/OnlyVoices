@@ -22,6 +22,7 @@ const { ElevenLabsClient } = require('../utils/elevenlabs.cjs');
 const { parseMultipartData } = require('./multipartParser.cjs');
 const { SecretsManager } = require('../utils/secretsManager.cjs');
 const { rateLimiter } = require('../utils/rateLimiter.cjs');
+const { YouTubeAudioExtractor } = require('../utils/youtube.cjs');
 const AWS = require('aws-sdk');
 
 const sqs = new AWS.SQS({ region: process.env.AWS_REGION || 'us-east-1' });
