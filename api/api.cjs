@@ -23,9 +23,9 @@ const { parseMultipartData } = require('./multipartParser.cjs');
 const { SecretsManager } = require('../utils/secretsManager.cjs');
 const { rateLimiter } = require('../utils/rateLimiter.cjs');
 const { YouTubeAudioExtractor } = require('../utils/youtube.cjs');
-const AWS = require('aws-sdk');
+const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
 
-const sqs = new AWS.SQS({ region: process.env.AWS_REGION || 'us-east-1' });
+const sqs = new SQSClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const secretsManager = new SecretsManager(process.env.AWS_REGION || 'us-east-1');
 
 // Helper function to verify Firebase token
@@ -281,7 +281,7 @@ exports.handler = async (event, context) => {
             const queueUrl = process.env.RENDER_QUEUE_URL ||
                 `https://sqs.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${process.env.AWS_ACCOUNT_ID || ''}/onlyvoices-render-jobs-${process.env.STAGE || 'prod'}`;
 
-            await sqs.sendMessage({
+            await sqs.send(new SendMessageCommand({
                 QueueUrl: queueUrl,
                 MessageBody: JSON.stringify({
                     jobId: renderJobRef.id,
@@ -291,7 +291,7 @@ exports.handler = async (event, context) => {
                     voiceId,
                     language: language || 'en'
                 })
-            }).promise();
+            }));
 
             return {
                 statusCode: 200,

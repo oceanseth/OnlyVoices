@@ -1,44 +1,34 @@
-const AWS = require('aws-sdk');
+const { SSMClient, GetParameterCommand } = require('@aws-sdk/client-ssm');
 const admin = require('firebase-admin');
-AWS.config.update({ region: 'us-east-1' });
-
-// Note: Local environment is loaded in api/api.js handler
-// No need to load again here
 
 class FirebaseInitializer {
   constructor() {
-    this.ssm = new AWS.SSM();
+    this.ssmClient = new SSMClient({ region: process.env.AWS_REGION || 'us-east-1' });
     this.firebaseApp = null;
   }
 
   async initialize() {
     try {
-      // Return existing instance if already initialized
       if (this.firebaseApp) return this.firebaseApp;
 
       let serviceAccountJson;
 
-      // Check if running locally
       if (process.env.IS_OFFLINE === 'true' || process.env.STAGE === 'local') {
-        console.log('🔧 Running in local mode - loading Firebase from environment');
-        
+        console.log('Running in local mode - loading Firebase from environment');
+
         if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
           throw new Error('FIREBASE_SERVICE_ACCOUNT not found in .env.local. Please copy env.local.example to .env.local and fill in your credentials.');
         }
 
-        // Decode base64 service account
         serviceAccountJson = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT, 'base64').toString('utf8');
       } else {
-        // Production mode - load from SSM
-        console.log('☁️  Running in production mode - loading Firebase from SSM');
-        
-        const params = {
-          Name: '/onlyvoices/prod/firebase_service_account',
-          WithDecryption: true
-        };
+        console.log('Running in production mode - loading Firebase from SSM');
 
-        const result = await this.ssm.getParameter(params).promise();
-        
+        const result = await this.ssmClient.send(new GetParameterCommand({
+          Name: '/onlyvoices/prod/firebase_service_account',
+          WithDecryption: true,
+        }));
+
         if (!result?.Parameter?.Value) {
           throw new Error('Firebase service account credentials not found in SSM');
         }
@@ -54,12 +44,12 @@ class FirebaseInitializer {
         || (projectId ? `${projectId}.firebasestorage.app` : undefined);
       const resolvedDatabaseUrl = process.env.FIREBASE_DATABASE_URL
         || (projectId ? `https://${projectId}-default-rtdb.firebaseio.com` : undefined)
-        || 'https://onlyvoices-ed470-default-rtdb.firebaseio.com';
+        || 'https://onlyvoices-default-rtdb.firebaseio.com';
 
       this.firebaseApp = admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
         databaseURL: resolvedDatabaseUrl,
-        storageBucket: resolvedStorageBucket
+        storageBucket: resolvedStorageBucket,
       });
 
       if (!resolvedStorageBucket) {
@@ -77,4 +67,3 @@ class FirebaseInitializer {
 }
 
 module.exports = new FirebaseInitializer();
-

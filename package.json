@@ -15,6 +15,10 @@
     "deploy:frontend": "npm run build && aws s3 sync dist/ s3://onlyvoices.ai --delete"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.990.0",
+    "@aws-sdk/client-secrets-manager": "^3.990.0",
+    "@aws-sdk/client-sqs": "^3.990.0",
+    "@aws-sdk/client-ssm": "^3.990.0",
     "@stripe/react-stripe-js": "^5.6.0",
     "@stripe/stripe-js": "^8.7.0",
     "aws-sdk": "^2.1693.0",

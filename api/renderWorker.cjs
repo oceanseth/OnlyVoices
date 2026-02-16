@@ -2,9 +2,9 @@
 const firebaseInitializer = require('../utils/firebaseInit.cjs');
 const { ElevenLabsClient } = require('../utils/elevenlabs.cjs');
 const { SecretsManager } = require('../utils/secretsManager.cjs');
-const AWS = require('aws-sdk');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
-const s3 = new AWS.S3({ region: process.env.AWS_REGION || 'us-east-1' });
+const s3 = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
 const secretsManager = new SecretsManager(process.env.AWS_REGION || 'us-east-1');
 
 exports.handler = async (event) => {
@@ -38,7 +38,7 @@ exports.handler = async (event) => {
             // Get user's ElevenLabs API key
             const userDoc = await db.collection('users').doc(userId).get();
             const userData = userDoc.data();
-            
+
             // Try Secrets Manager first, fallback to Firestore
             let elevenLabsKey = null;
             try {
@@ -47,7 +47,7 @@ exports.handler = async (event) => {
             } catch (e) {
                 console.log('Secret not found in Secrets Manager, trying Firestore');
             }
-            
+
             if (!elevenLabsKey) {
                 elevenLabsKey = userData?.elevenlabsApiKey;
             }
@@ -59,27 +59,19 @@ exports.handler = async (event) => {
             // Initialize ElevenLabs client
             const elevenLabs = new ElevenLabsClient(elevenLabsKey);
 
-            // For now, we'll render a sample text
-            // In production, you would:
-            // 1. Get the full book text/content
-            // 2. Split into chunks
-            // 3. Render each chunk
-            // 4. Combine audio files
-            // 5. Upload to S3
-
             const sampleText = `This is a sample rendering of ${book.title || 'your audiobook'}. Full implementation would process the entire book content.`;
-            
+
             // Render audio
             const audioData = await elevenLabs.textToSpeech(voiceId, sampleText, 'eleven_multilingual_v2');
 
             // Upload to S3
             const s3Key = `renders/${userId}/${jobId}/audio.mp3`;
-            await s3.putObject({
+            await s3.send(new PutObjectCommand({
                 Bucket: process.env.S3_BUCKET || 'onlyvoices.ai',
                 Key: s3Key,
                 Body: Buffer.from(audioData, 'base64'),
-                ContentType: 'audio/mpeg'
-            }).promise();
+                ContentType: 'audio/mpeg',
+            }));
 
             const audioUrl = `https://${process.env.S3_BUCKET || 'onlyvoices.ai'}/${s3Key}`;
 
@@ -94,14 +86,13 @@ exports.handler = async (event) => {
 
         } catch (error) {
             console.error('Error processing render job:', error);
-            
-            // Update job status to failed
+
             try {
                 const jobData = JSON.parse(record.body);
                 await firebaseInitializer.initialize();
                 const admin = require('firebase-admin');
                 const db = admin.firestore();
-                
+
                 await db.collection('users').doc(jobData.userId).collection('renders').doc(jobData.jobId).update({
                     status: 'failed',
                     error: error.message,
@@ -111,11 +102,9 @@ exports.handler = async (event) => {
                 console.error('Error updating failed job status:', updateError);
             }
 
-            // Re-throw to send to DLQ after max retries
             throw error;
         }
     }
 
     return { statusCode: 200, body: 'Processed' };
 };
-

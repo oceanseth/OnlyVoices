@@ -6,23 +6,23 @@
 const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
-const AWS = require('aws-sdk');
+const { SSMClient, GetParameterCommand } = require('@aws-sdk/client-ssm');
 
 async function deployRules() {
     try {
         // Get service account
         let serviceAccountJson;
-        
+
         if (process.env.FIREBASE_SERVICE_ACCOUNT) {
             // Local development
             serviceAccountJson = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT, 'base64').toString('utf8');
         } else {
             // Production - get from SSM
-            const ssm = new AWS.SSM({ region: process.env.AWS_REGION || 'us-east-1' });
-            const result = await ssm.getParameter({
+            const ssm = new SSMClient({ region: process.env.AWS_REGION || 'us-east-1' });
+            const result = await ssm.send(new GetParameterCommand({
                 Name: '/onlyvoices/prod/firebase_service_account',
                 WithDecryption: true
-            }).promise();
+            }));
             serviceAccountJson = result.Parameter.Value;
         }
 

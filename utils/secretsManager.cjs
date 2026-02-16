@@ -1,83 +1,61 @@
-const AWS = require('aws-sdk');
+const { SecretsManagerClient, GetSecretValueCommand, UpdateSecretCommand, CreateSecretCommand, DeleteSecretCommand } = require('@aws-sdk/client-secrets-manager');
 
 class SecretsManager {
     constructor(region = 'us-east-1') {
-        this.client = new AWS.SecretsManager({ region });
+        this.client = new SecretsManagerClient({ region });
     }
 
-    /**
-     * Get a secret value from AWS Secrets Manager
-     * @param {string} secretName - Name of the secret (without prefix)
-     * @param {string} stage - Deployment stage (prod, dev, etc.)
-     * @returns {Promise<object|string>} Secret value (parsed JSON if possible, otherwise string)
-     */
     async getSecret(secretName, stage = 'prod') {
         try {
             const fullSecretName = `onlyvoices/${stage}/${secretName}`;
-            const result = await this.client.getSecretValue({ SecretId: fullSecretName }).promise();
-            
-            // Try to parse as JSON, fallback to string
+            const result = await this.client.send(new GetSecretValueCommand({ SecretId: fullSecretName }));
+
             try {
                 return JSON.parse(result.SecretString);
             } catch (e) {
                 return result.SecretString;
             }
         } catch (error) {
-            if (error.code === 'ResourceNotFoundException') {
+            if (error.name === 'ResourceNotFoundException') {
                 return null;
             }
             throw error;
         }
     }
 
-    /**
-     * Create or update a secret in AWS Secrets Manager
-     * @param {string} secretName - Name of the secret (without prefix)
-     * @param {object|string} secretValue - Value to store
-     * @param {string} stage - Deployment stage
-     * @param {string} description - Optional description
-     * @returns {Promise<string>} Secret ARN
-     */
     async putSecret(secretName, secretValue, stage = 'prod', description = null) {
         const fullSecretName = `onlyvoices/${stage}/user/${secretName}`;
         const secretString = typeof secretValue === 'string' ? secretValue : JSON.stringify(secretValue);
 
         try {
-            // Try to update existing secret
-            const result = await this.client.updateSecret({
+            const result = await this.client.send(new UpdateSecretCommand({
                 SecretId: fullSecretName,
                 SecretString: secretString,
-                Description: description
-            }).promise();
+                Description: description,
+            }));
             return result.ARN;
         } catch (error) {
-            if (error.code === 'ResourceNotFoundException') {
-                // Create new secret
-                const result = await this.client.createSecret({
+            if (error.name === 'ResourceNotFoundException') {
+                const result = await this.client.send(new CreateSecretCommand({
                     Name: fullSecretName,
                     SecretString: secretString,
-                    Description: description || `Secret for ${secretName}`
-                }).promise();
+                    Description: description || `Secret for ${secretName}`,
+                }));
                 return result.ARN;
             }
             throw error;
         }
     }
 
-    /**
-     * Delete a secret
-     * @param {string} secretName - Name of the secret
-     * @param {string} stage - Deployment stage
-     */
     async deleteSecret(secretName, stage = 'prod') {
         const fullSecretName = `onlyvoices/${stage}/user/${secretName}`;
         try {
-            await this.client.deleteSecret({
+            await this.client.send(new DeleteSecretCommand({
                 SecretId: fullSecretName,
-                ForceDeleteWithoutRecovery: true
-            }).promise();
+                ForceDeleteWithoutRecovery: true,
+            }));
         } catch (error) {
-            if (error.code !== 'ResourceNotFoundException') {
+            if (error.name !== 'ResourceNotFoundException') {
                 throw error;
             }
         }
@@ -85,4 +63,3 @@ class SecretsManager {
 }
 
 module.exports = { SecretsManager };
-
