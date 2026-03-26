@@ -1,0 +1,61 @@
+.content-library {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.content-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.content-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.content-icon {
+  font-size: 2rem;
+}
+
+.content-title {
+  font-size: 1rem;
+}
+
+.content-author {
+  color: var(--ov-text-secondary);
+  font-size: 0.85rem;
+}
+
+.content-preview {
+  color: var(--ov-text-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.content-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: var(--ov-text-muted);
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--ov-border);
+}
+
+.upload-modal {
+  max-width: 560px;
+}
+.upload-modal .modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  color: var(--ov-text-secondary);
+  font-size: 1.75rem;
+  cursor: pointer;
+  line-height: 1;
+}

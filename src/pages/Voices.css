@@ -1,0 +1,135 @@
+.voices-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.page-header h1 {
+  font-size: 1.75rem;
+}
+.page-subtitle {
+  color: var(--ov-text-secondary);
+  margin-top: 0.25rem;
+}
+
+.voice-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.voice-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.voice-card-icon {
+  font-size: 2.5rem;
+}
+
+.voice-card-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.fav-btn {
+  font-size: 1.25rem;
+  color: var(--ov-text-muted);
+}
+.fav-btn.active {
+  color: var(--ov-warning);
+}
+.fav-btn:hover {
+  color: var(--ov-warning) !important;
+}
+
+.delete-btn:hover {
+  color: var(--ov-error) !important;
+}
+
+.default-voice-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.default-voice-text {
+  color: var(--ov-text-secondary);
+  font-size: 0.95rem;
+}
+
+.default-btn.active {
+  color: var(--ov-primary) !important;
+}
+
+.voice-card-name {
+  font-size: 1.1rem;
+  margin-top: 0.25rem;
+}
+
+.voice-card-id {
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--ov-text-muted);
+}
+
+.voice-card-method {
+  font-size: 0.85rem;
+  color: var(--ov-text-secondary);
+}
+
+/* Train modal */
+.train-modal {
+  max-width: 560px;
+}
+.train-modal .modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  color: var(--ov-text-secondary);
+  font-size: 1.75rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.help-text {
+  font-size: 0.85rem;
+  color: var(--ov-text-muted);
+  margin-top: 0.5rem;
+}
+
+.sample-text {
+  padding: 1rem;
+  background: var(--ov-bg);
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius-md);
+  color: var(--ov-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.7;
+  margin-bottom: 1rem;
+}
+
+.record-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}

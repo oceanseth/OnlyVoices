@@ -1,0 +1,502 @@
+/* OnlyVoices Global Styles - Creator-focused social platform aesthetic */
+
+:root {
+  /* Brand colors - inspired by OnlyFans blue + audio wave purples */
+  --ov-primary: #00aff0;
+  --ov-primary-dark: #0095cc;
+  --ov-primary-light: #33bff3;
+  --ov-secondary: #8b5cf6;
+  --ov-secondary-dark: #7c3aed;
+  --ov-accent: #f43f5e;
+  --ov-success: #10b981;
+  --ov-warning: #f59e0b;
+  --ov-error: #ef4444;
+
+  /* Background & surface */
+  --ov-bg: #0a0a0a;
+  --ov-bg-secondary: #111111;
+  --ov-surface: #1a1a1a;
+  --ov-surface-hover: #222222;
+  --ov-surface-elevated: #252525;
+  --ov-border: #2a2a2a;
+  --ov-border-light: #333333;
+
+  /* Text */
+  --ov-text: #f5f5f5;
+  --ov-text-secondary: #a0a0a0;
+  --ov-text-muted: #666666;
+
+  /* Gradients */
+  --ov-gradient-primary: linear-gradient(135deg, #00aff0, #8b5cf6);
+  --ov-gradient-hot: linear-gradient(135deg, #f43f5e, #8b5cf6);
+  --ov-gradient-surface: linear-gradient(180deg, #1a1a1a, #111111);
+
+  /* Spacing */
+  --ov-radius-sm: 8px;
+  --ov-radius-md: 12px;
+  --ov-radius-lg: 16px;
+  --ov-radius-xl: 24px;
+  --ov-radius-full: 9999px;
+
+  /* Shadows */
+  --ov-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --ov-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --ov-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --ov-shadow-glow: 0 0 20px rgba(0, 175, 240, 0.3);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--ov-bg);
+  color: var(--ov-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+a {
+  color: var(--ov-primary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+a:hover {
+  color: var(--ov-primary-light);
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input, textarea, select {
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+/* Utility classes */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: var(--ov-radius-md);
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.btn-primary {
+  background: var(--ov-primary);
+  color: white;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--ov-primary-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--ov-shadow-glow);
+}
+
+.btn-gradient {
+  background: var(--ov-gradient-primary);
+  color: white;
+}
+.btn-gradient:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: var(--ov-shadow-glow);
+}
+
+.btn-secondary {
+  background: var(--ov-surface);
+  color: var(--ov-text);
+  border: 1px solid var(--ov-border-light);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--ov-surface-hover);
+  border-color: var(--ov-text-muted);
+}
+
+.btn-danger {
+  background: var(--ov-error);
+  color: white;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.btn-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+.btn-lg {
+  padding: 1rem 2rem;
+  font-size: 1.1rem;
+}
+
+.btn-icon {
+  padding: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--ov-text-secondary);
+  border-radius: var(--ov-radius-sm);
+}
+.btn-icon:hover {
+  color: var(--ov-text);
+  background: var(--ov-surface-hover);
+}
+
+/* Cards */
+.card {
+  background: var(--ov-surface);
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius-lg);
+  padding: 1.5rem;
+  transition: all 0.2s ease;
+}
+.card:hover {
+  border-color: var(--ov-border-light);
+}
+.card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ov-shadow-md);
+  border-color: var(--ov-primary);
+}
+
+/* Form elements */
+.input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--ov-bg-secondary);
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius-md);
+  color: var(--ov-text);
+  font-size: 1rem;
+  transition: border-color 0.2s;
+}
+.input:focus {
+  outline: none;
+  border-color: var(--ov-primary);
+  box-shadow: 0 0 0 3px rgba(0, 175, 240, 0.15);
+}
+.input::placeholder {
+  color: var(--ov-text-muted);
+}
+
+.textarea {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--ov-bg-secondary);
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius-md);
+  color: var(--ov-text);
+  font-size: 1rem;
+  resize: vertical;
+  min-height: 100px;
+  font-family: inherit;
+}
+.textarea:focus {
+  outline: none;
+  border-color: var(--ov-primary);
+  box-shadow: 0 0 0 3px rgba(0, 175, 240, 0.15);
+}
+
+.select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--ov-bg-secondary);
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius-md);
+  color: var(--ov-text);
+  font-size: 1rem;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23a0a0a0' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  padding-right: 2.5rem;
+}
+.select:focus {
+  outline: none;
+  border-color: var(--ov-primary);
+}
+
+.label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ov-text-secondary);
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+/* Badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--ov-radius-full);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.badge-primary {
+  background: rgba(0, 175, 240, 0.15);
+  color: var(--ov-primary);
+}
+.badge-success {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--ov-success);
+}
+.badge-warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--ov-warning);
+}
+.badge-error {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--ov-error);
+}
+.badge-hot {
+  background: var(--ov-gradient-hot);
+  color: white;
+}
+
+/* Avatar */
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--ov-gradient-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1rem;
+  color: white;
+  flex-shrink: 0;
+}
+.avatar-lg {
+  width: 80px;
+  height: 80px;
+  font-size: 2rem;
+}
+.avatar-xl {
+  width: 120px;
+  height: 120px;
+  font-size: 3rem;
+}
+
+/* Grid */
+.grid {
+  display: grid;
+  gap: 1.5rem;
+}
+.grid-2 {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.grid-3 {
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--ov-border);
+  margin-bottom: 2rem;
+  overflow-x: auto;
+}
+.tab {
+  padding: 0.75rem 1.5rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--ov-text-secondary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.tab:hover {
+  color: var(--ov-text);
+}
+.tab.active {
+  color: var(--ov-primary);
+  border-bottom-color: var(--ov-primary);
+  font-weight: 600;
+}
+
+/* Modal overlay */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+  padding: 1rem;
+}
+.modal-content {
+  background: var(--ov-surface-elevated);
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius-xl);
+  padding: 2rem;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideUp 0.3s ease;
+}
+.modal-content h2 {
+  margin-bottom: 1.5rem;
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--ov-text-secondary);
+}
+.empty-state h3 {
+  margin-bottom: 0.5rem;
+  color: var(--ov-text);
+}
+.empty-state p {
+  margin-bottom: 1.5rem;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Loader */
+.loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+}
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--ov-border);
+  border-top-color: var(--ov-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Price tag */
+.price {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  color: var(--ov-success);
+}
+.price-lg {
+  font-size: 1.5rem;
+}
+
+/* Toast notification (basic) */
+.toast-container {
+  position: fixed;
+  top: 80px;
+  right: 1rem;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  html {
+    font-size: 15px;
+  }
+  .container {
+    padding: 0 1rem;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--ov-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ov-border-light);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ov-text-muted);
+}

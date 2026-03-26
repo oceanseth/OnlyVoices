@@ -1,0 +1,94 @@
+.earnings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.earnings-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.stat-card {
+  background: var(--ov-surface);
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius-lg);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.stat-card-label {
+  font-size: 0.85rem;
+  color: var(--ov-text-secondary);
+}
+.stat-card-value {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.stripe-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: rgba(0, 175, 240, 0.05);
+  border-color: rgba(0, 175, 240, 0.2);
+  flex-wrap: wrap;
+}
+.stripe-cta h3 {
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+.stripe-cta p {
+  color: var(--ov-text-secondary);
+  font-size: 0.9rem;
+}
+
+.earnings-section h2 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.transactions-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius-lg);
+  overflow: hidden;
+}
+
+.transaction-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--ov-border);
+  gap: 1rem;
+}
+.transaction-row:last-child {
+  border-bottom: none;
+}
+
+.tx-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.tx-type {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.tx-desc {
+  color: var(--ov-text-secondary);
+  font-size: 0.85rem;
+}
+
+.tx-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: right;
+}

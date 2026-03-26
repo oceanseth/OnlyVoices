@@ -5,7 +5,7 @@
 
 const express = require('express');
 const cors = require('cors');
-const { loadLocalEnv } = require('../local-env-loader');
+const { loadLocalEnv } = require('../local-env-loader.cjs');
 
 // Load local environment variables
 if (process.env.IS_OFFLINE === 'true' || process.env.STAGE === 'local' || !process.env.STAGE) {
@@ -17,7 +17,7 @@ if (process.env.IS_OFFLINE === 'true' || process.env.STAGE === 'local' || !proce
 }
 
 // Import Lambda handler
-const lambdaHandler = require('../api/api').handler;
+const lambdaHandler = require('../api/api.cjs').handler;
 
 const app = express();
 const PORT = process.env.API_PORT || 3001;

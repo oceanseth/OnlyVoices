@@ -1,0 +1,97 @@
+.creator-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.profile-banner {
+  height: 180px;
+  background: var(--ov-gradient-primary);
+  border-radius: var(--ov-radius-lg);
+  margin-bottom: -60px;
+}
+
+.profile-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  padding: 0 1.5rem;
+  flex-wrap: wrap;
+}
+
+.profile-info .profile-avatar {
+  border: 4px solid var(--ov-bg);
+  flex-shrink: 0;
+}
+.profile-info .profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.profile-details {
+  flex: 1;
+  min-width: 200px;
+}
+.profile-details h1 {
+  font-size: 1.5rem;
+}
+.profile-handle {
+  color: var(--ov-text-muted);
+  margin-bottom: 0.5rem;
+}
+.profile-bio {
+  color: var(--ov-text-secondary);
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+.profile-stats {
+  display: flex;
+  gap: 2rem;
+}
+.profile-stat {
+  display: flex;
+  flex-direction: column;
+}
+.profile-stat .stat-value {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.profile-stat .stat-label {
+  font-size: 0.8rem;
+  color: var(--ov-text-muted);
+}
+
+.profile-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.profile-section h2 {
+  font-size: 1.25rem;
+}
+
+.listing-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.listing-item h3 {
+  font-size: 1rem;
+}
+.listing-item-desc {
+  color: var(--ov-text-secondary);
+  font-size: 0.9rem;
+  flex: 1;
+}
+.listing-item-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--ov-border);
+}
