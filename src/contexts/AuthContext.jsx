@@ -26,6 +26,12 @@ export function AuthProvider({ children }) {
               photoURL: firebaseUser.photoURL || '',
               createdAt: new Date(),
               isCreator: false,
+              // Credits + voice-call pricing for the public `/:username` call page.
+              // 100 tokens ~= $10 initial credits (1 token ~= $0.10).
+              tokenBalance: 100,
+              tokensPerMinute: 10,
+              // Reference to a document id in `users/{uid}/voices/{voiceId}`.
+              defaultVoiceId: null,
             };
             await setDoc(doc(db, 'users', firebaseUser.uid), initialData);
             setUserData(initialData);

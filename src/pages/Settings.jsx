@@ -13,6 +13,11 @@ export default function Settings() {
   const [pricePerReading, setPricePerReading] = useState(
     userData?.pricePerReading ? (userData.pricePerReading / 100).toFixed(2) : ''
   );
+  const [tokensPerMinute, setTokensPerMinute] = useState(
+    userData?.tokensPerMinute !== undefined && userData?.tokensPerMinute !== null
+      ? userData.tokensPerMinute
+      : 10
+  );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [connectingStripe, setConnectingStripe] = useState(false);
@@ -32,6 +37,11 @@ export default function Settings() {
 
       if (pricePerReading) {
         updates.pricePerReading = Math.round(parseFloat(pricePerReading) * 100);
+      }
+
+      // Rate used for the public `/:username` call page.
+      if (tokensPerMinute !== undefined && tokensPerMinute !== null && tokensPerMinute !== '') {
+        updates.tokensPerMinute = Math.max(0, Math.round(Number(tokensPerMinute)));
       }
 
       await setDoc(doc(db, 'users', user.uid), updates, { merge: true });
@@ -168,6 +178,20 @@ export default function Settings() {
                   placeholder="5.00"
                 />
                 <p className="help-text">Minimum reading price. You keep 80%, platform fee is 20%.</p>
+              </div>
+
+              <div className="form-group">
+                <label className="label">Tokens per Minute (Calls)</label>
+                <input
+                  className="input"
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={tokensPerMinute}
+                  onChange={(e) => setTokensPerMinute(e.target.value)}
+                  placeholder="10"
+                />
+                <p className="help-text">Default: 10 tokens/minute. Users are charged in whole minutes during the call.</p>
               </div>
             </>
           ) : (

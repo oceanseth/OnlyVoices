@@ -65,4 +65,23 @@ export const api = {
 
   // Health check
   test: () => request('GET', '/test', null, { skipAuth: true }),
+
+  // ===== Vapi / Public Call Flow =====
+  // Public endpoint (no auth required)
+  getCreatorCallConfig: (username) =>
+    request(
+      'GET',
+      `/vapi/public/creator?${new URLSearchParams({ username })}`,
+      null,
+      { skipAuth: true }
+    ),
+
+  startCallSession: (username) =>
+    request('POST', '/vapi/call/sessions/start', { username }),
+
+  debitCallSessionMinute: (sessionId) =>
+    request('POST', `/vapi/call/sessions/${sessionId}/debitMinute`, {}),
+
+  endCallSession: (sessionId) =>
+    request('POST', `/vapi/call/sessions/${sessionId}/end`, {}),
 };

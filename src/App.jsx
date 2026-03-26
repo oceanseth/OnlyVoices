@@ -9,6 +9,7 @@ import CreatorProfilePage from './pages/CreatorProfilePage';
 import ContentLibrary from './pages/ContentLibrary';
 import Settings from './pages/Settings';
 import Earnings from './pages/Earnings';
+import CreatorCallPage from './pages/CreatorCallPage';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="/earnings" element={<Earnings />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
+      <Route path="/:username" element={<CreatorCallPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

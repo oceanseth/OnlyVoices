@@ -8,16 +8,21 @@ import { api } from '../services/api';
 import './Voices.css';
 
 export default function Voices() {
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
   const [voices, setVoices] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [activeTab, setActiveTab] = useState('custom');
   const [showTrainModal, setShowTrainModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [defaultVoiceId, setDefaultVoiceId] = useState(userData?.defaultVoiceId || null);
 
   useEffect(() => {
     loadVoices();
   }, [user.uid]);
+
+  useEffect(() => {
+    setDefaultVoiceId(userData?.defaultVoiceId || null);
+  }, [userData?.defaultVoiceId]);
 
   async function loadVoices() {
     try {
@@ -32,6 +37,16 @@ export default function Voices() {
       console.error('Error loading voices:', err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function setDefaultVoice(voiceId) {
+    try {
+      await setDoc(doc(db, 'users', user.uid), { defaultVoiceId: voiceId }, { merge: true });
+      setDefaultVoiceId(voiceId);
+    } catch (err) {
+      console.error('Error setting default voice:', err);
+      alert('Failed to set default voice: ' + err.message);
     }
   }
 
@@ -64,6 +79,7 @@ export default function Voices() {
 
   const readyVoices = voices.filter((v) => v.status === 'ready');
   const favVoices = voices.filter((v) => favorites.includes(v.id));
+  const defaultVoice = defaultVoiceId ? voices.find((v) => v.id === defaultVoiceId) : null;
 
   return (
     <div className="voices-page">
@@ -76,6 +92,16 @@ export default function Voices() {
           + Train New Voice
         </button>
       </div>
+
+      {defaultVoiceId && defaultVoice && (
+        <div className="default-voice-hint">
+          <span className="badge badge-primary">Default Voice</span>
+          <span className="default-voice-text">
+            {defaultVoice.name || 'Untitled Voice'} -{' '}
+            {defaultVoice.status === 'ready' ? 'Ready' : 'Not ready (Call disabled)'}
+          </span>
+        </div>
+      )}
 
       <div className="tabs">
         <button className={`tab ${activeTab === 'custom' ? 'active' : ''}`} onClick={() => setActiveTab('custom')}>
@@ -121,6 +147,8 @@ export default function Voices() {
                 voice={voice}
                 isFavorite={favorites.includes(voice.id)}
                 onToggleFavorite={() => toggleFavorite(voice.id)}
+                isDefault={voice.id === defaultVoiceId}
+                onSetDefault={() => setDefaultVoice(voice.id)}
                 onDelete={() => deleteVoice(voice.id, voice.name)}
               />
             ))}
@@ -139,7 +167,7 @@ export default function Voices() {
   );
 }
 
-function VoiceCard({ voice, isFavorite, onToggleFavorite, onDelete }) {
+function VoiceCard({ voice, isFavorite, onToggleFavorite, isDefault, onSetDefault, onDelete }) {
   const statusConfig = {
     ready: { label: 'Ready', badge: 'badge-success' },
     training: { label: 'Training...', badge: 'badge-warning' },
@@ -161,6 +189,13 @@ function VoiceCard({ voice, isFavorite, onToggleFavorite, onDelete }) {
             title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           >
             {isFavorite ? '★' : '☆'}
+          </button>
+          <button
+            className={`btn-icon default-btn ${isDefault ? 'active' : ''}`}
+            onClick={onSetDefault}
+            title={isDefault ? 'Default voice' : 'Set as default voice'}
+          >
+            {isDefault ? '●' : '○'}
           </button>
           <button className="btn-icon delete-btn" onClick={onDelete} title="Delete voice">
             ✕
@@ -258,7 +293,8 @@ function TrainVoiceModal({ user, onClose, onSuccess }) {
       if (result.voiceId) {
         await updateDoc(doc(db, 'users', user.uid, 'voices', voiceDoc.id), {
           elevenlabsVoiceId: result.voiceId,
-          status: 'training',
+          // Backend marks the ElevenLabs voice as ready; we keep UI status consistent.
+          status: 'ready',
           updatedAt: new Date(),
         });
       }

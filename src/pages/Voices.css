@@ -55,6 +55,22 @@
   color: var(--ov-error) !important;
 }
 
+.default-voice-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.default-voice-text {
+  color: var(--ov-text-secondary);
+  font-size: 0.95rem;
+}
+
+.default-btn.active {
+  color: var(--ov-primary) !important;
+}
+
 .voice-card-name {
   font-size: 1.1rem;
   margin-top: 0.25rem;

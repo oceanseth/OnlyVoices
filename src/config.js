@@ -17,6 +17,10 @@ export const config = {
       return 'https://onlyvoices.ai';
     }
   },
+  vapi: {
+    // Public key from Vapi dashboard. Only used client-side to connect Web SDK.
+    publicKey: import.meta.env.VITE_VAPI_PUBLIC_KEY || '',
+  },
   stripe: {
     publishableKey: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '',
     platformFeePercent: 20,

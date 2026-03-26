@@ -47,6 +47,66 @@ async function verifyAuth(event) {
     }
 }
 
+// Helper function to look up a creator by their public `username` field.
+async function getCreatorByUsername(db, username) {
+    if (!username) return null;
+    const creatorSnap = await db.collection('users')
+        .where('username', '==', username)
+        .limit(1)
+        .get();
+
+    if (creatorSnap.empty) return null;
+    const docSnap = creatorSnap.docs[0];
+    return { creatorId: docSnap.id, data: docSnap.data() };
+}
+
+async function createVapiAssistantForElevenLabsVoice({ elevenlabsVoiceId }) {
+    const vapiApiKey =
+        (await secretsManager.getSecret('vapi-api-key', 'prod')) ||
+        process.env.VAPI_API_KEY;
+
+    if (!vapiApiKey) {
+        throw new Error('Vapi API key not configured (missing vapi-api-key secret or VAPI_API_KEY env var)');
+    }
+
+    const payload = {
+        // These are the required top-level assistant fields in Vapi.
+        name: 'OnlyVoicesCreatorCallAssistant',
+        firstMessage: 'Hi! Speak naturally and I will respond.',
+        model: {
+            provider: 'openai',
+            model: process.env.VAPI_MODEL || 'gpt-4o-mini',
+            temperature: 0.7,
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a friendly conversational voice agent for OnlyVoices. Keep responses concise.'
+                }
+            ]
+        },
+        voice: {
+            provider: '11labs',
+            voiceId: elevenlabsVoiceId
+        }
+    };
+
+    const res = await fetch('https://api.vapi.ai/assistant', {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${vapiApiKey}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data?.error || data?.message || `Failed to create Vapi assistant (${res.status})`);
+    }
+
+    return data?.id || data?.assistantId;
+}
+
 // Helper function to get user's ElevenLabs API key (Secrets Manager first, then Firestore)
 async function getUserElevenLabsKey(userId) {
     try {
@@ -204,6 +264,357 @@ exports.handler = async (event, context) => {
                 stage: process.env.STAGE || 'unknown'
             })
         };
+    }
+
+    // ===== Vapi Public Call Flow =====
+    //
+    // GET /vapi/public/creator?username=:username
+    // Public endpoint (no auth) used by the public `/:username` call page.
+    if (path === '/vapi/public/creator' && method === 'GET') {
+        try {
+            await firebaseInitializer.initialize();
+            const admin = require('firebase-admin');
+            const db = admin.firestore();
+
+            const username = event.queryStringParameters?.username || '';
+            const creator = await getCreatorByUsername(db, username);
+            if (!creator) {
+                return {
+                    statusCode: 404,
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ error: 'Creator not found' })
+                };
+            }
+
+            const creatorData = creator.data || {};
+            const tokensPerMinute = creatorData.tokensPerMinute ?? 10;
+            const defaultVoiceId = creatorData.defaultVoiceId || null;
+
+            let defaultVoice = { voiceId: defaultVoiceId, status: 'missing' };
+            if (defaultVoiceId) {
+                const voiceDoc = await db.collection('users').doc(creator.creatorId)
+                    .collection('voices')
+                    .doc(defaultVoiceId)
+                    .get();
+
+                if (voiceDoc.exists) {
+                    defaultVoice = {
+                        voiceId: voiceDoc.id,
+                        status: voiceDoc.data()?.status || 'missing',
+                    };
+                }
+            }
+
+            return {
+                statusCode: 200,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    creatorId: creator.creatorId,
+                    displayName: creatorData.displayName || username,
+                    username,
+                    tokensPerMinute,
+                    defaultVoiceReady: defaultVoice.status === 'ready',
+                    defaultVoice
+                })
+            };
+        } catch (error) {
+            console.error('Vapi public creator error:', error);
+            return {
+                statusCode: 500,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: 'Failed to load creator', message: error.message })
+            };
+        }
+    }
+
+    // POST /vapi/call/sessions/start
+    // Auth required. Creates a session and returns a Vapi assistantId to start the Web SDK call.
+    if (path === '/vapi/call/sessions/start' && method === 'POST') {
+        const user = await verifyAuth(event);
+        if (!user) {
+            return {
+                statusCode: 401,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: 'Unauthorized' })
+            };
+        }
+
+        try {
+            await firebaseInitializer.initialize();
+            const admin = require('firebase-admin');
+            const db = admin.firestore();
+
+            const body = parseBody(event);
+            const { username } = body || {};
+            if (!username) {
+                return {
+                    statusCode: 400,
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ error: 'username is required' })
+                };
+            }
+
+            const creator = await getCreatorByUsername(db, username);
+            if (!creator) {
+                return {
+                    statusCode: 404,
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ error: 'Creator not found' })
+                };
+            }
+
+            const creatorData = creator.data || {};
+            const tokensPerMinute = creatorData.tokensPerMinute ?? 10;
+            const defaultVoiceId = creatorData.defaultVoiceId || null;
+            if (!defaultVoiceId) {
+                return {
+                    statusCode: 400,
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ error: 'Creator has no default voice set' })
+                };
+            }
+
+            const voiceRef = db.collection('users').doc(creator.creatorId).collection('voices').doc(defaultVoiceId);
+            const voiceDoc = await voiceRef.get();
+            if (!voiceDoc.exists) {
+                return {
+                    statusCode: 404,
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ error: 'Default voice not found' })
+                };
+            }
+
+            const voiceData = voiceDoc.data() || {};
+            if (voiceData.status !== 'ready') {
+                return {
+                    statusCode: 400,
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ error: 'Default voice is not ready' })
+                };
+            }
+
+            if (!voiceData.elevenlabsVoiceId) {
+                return {
+                    statusCode: 400,
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ error: 'Default voice is missing elevenlabsVoiceId' })
+                };
+            }
+
+            // Provision a per-voice Vapi assistant if missing.
+            let vapiAssistantId = voiceData.vapiAssistantId || null;
+            if (!vapiAssistantId) {
+                vapiAssistantId = await createVapiAssistantForElevenLabsVoice({
+                    elevenlabsVoiceId: voiceData.elevenlabsVoiceId
+                });
+
+                if (!vapiAssistantId) {
+                    throw new Error('Vapi assistant creation did not return an id');
+                }
+
+                await voiceRef.set({
+                    vapiAssistantId,
+                    vapiAssistantUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true });
+            }
+
+            const userDoc = await db.collection('users').doc(user.uid).get();
+            const userData = userDoc.exists ? userDoc.data() : {};
+            const tokenBalance = userData.tokenBalance ?? 100;
+
+            if (tokenBalance < tokensPerMinute) {
+                return {
+                    statusCode: 402,
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        error: 'Insufficient credits',
+                        tokenBalance,
+                        tokensPerMinute
+                    })
+                };
+            }
+
+            const sessionRef = db.collection('vapiCallSessions').doc();
+            await sessionRef.set({
+                userId: user.uid,
+                creatorId: creator.creatorId,
+                creatorUsername: username,
+                defaultVoiceId,
+                tokensPerMinute,
+                vapiAssistantId,
+                status: 'active',
+                minutesBilled: 0,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                startedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+
+            return {
+                statusCode: 200,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId: sessionRef.id,
+                    vapiAssistantId,
+                    tokensPerMinute,
+                    tokenBalance,
+                })
+            };
+        } catch (error) {
+            console.error('Vapi start session error:', error);
+            return {
+                statusCode: 500,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: 'Failed to start voice session', message: error.message })
+            };
+        }
+    }
+
+    // POST /vapi/call/sessions/:sessionId/debitMinute
+    if (method === 'POST' && path.startsWith('/vapi/call/sessions/') && path.endsWith('/debitMinute')) {
+        const user = await verifyAuth(event);
+        if (!user) {
+            return {
+                statusCode: 401,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: 'Unauthorized' })
+            };
+        }
+
+        try {
+            await firebaseInitializer.initialize();
+            const admin = require('firebase-admin');
+            const db = admin.firestore();
+
+            const parts = path.split('/').filter(Boolean);
+            const sessionId = parts[3];
+            if (!sessionId) {
+                return {
+                    statusCode: 400,
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ error: 'sessionId not found in path' })
+                };
+            }
+
+            const sessionRef = db.collection('vapiCallSessions').doc(sessionId);
+
+            let result = { ok: false, reason: 'unknown' };
+            await db.runTransaction(async (tx) => {
+                const sessionSnap = await tx.get(sessionRef);
+                if (!sessionSnap.exists) {
+                    result = { ok: false, reason: 'session_not_found' };
+                    return;
+                }
+
+                const sessionData = sessionSnap.data() || {};
+                if (sessionData.userId !== user.uid) {
+                    result = { ok: false, reason: 'forbidden' };
+                    return;
+                }
+                if (sessionData.status !== 'active') {
+                    result = { ok: false, reason: 'session_inactive' };
+                    return;
+                }
+
+                const userRef = db.collection('users').doc(user.uid);
+                const userSnap = await tx.get(userRef);
+                const userData = userSnap.exists ? userSnap.data() : {};
+                const tokenBalance = userData.tokenBalance ?? 100;
+                const tokensPerMinute = sessionData.tokensPerMinute ?? 10;
+
+                if (tokenBalance < tokensPerMinute) {
+                    result = { ok: false, reason: 'insufficient_tokens', tokenBalance };
+                    return;
+                }
+
+                const newBalance = tokenBalance - tokensPerMinute;
+                tx.update(userRef, { tokenBalance: newBalance });
+                tx.update(sessionRef, {
+                    minutesBilled: (sessionData.minutesBilled || 0) + 1,
+                    lastBilledAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+
+                result = { ok: true, tokenBalance: newBalance };
+            });
+
+            return {
+                statusCode: 200,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify(result)
+            };
+        } catch (error) {
+            console.error('Vapi debit minute error:', error);
+            return {
+                statusCode: 500,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: 'Failed to debit credits', message: error.message })
+            };
+        }
+    }
+
+    // POST /vapi/call/sessions/:sessionId/end
+    if (method === 'POST' && path.startsWith('/vapi/call/sessions/') && path.endsWith('/end')) {
+        const user = await verifyAuth(event);
+        if (!user) {
+            return {
+                statusCode: 401,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: 'Unauthorized' })
+            };
+        }
+
+        try {
+            await firebaseInitializer.initialize();
+            const admin = require('firebase-admin');
+            const db = admin.firestore();
+
+            const parts = path.split('/').filter(Boolean);
+            const sessionId = parts[3];
+            if (!sessionId) {
+                return {
+                    statusCode: 400,
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ error: 'sessionId not found in path' })
+                };
+            }
+
+            const sessionRef = db.collection('vapiCallSessions').doc(sessionId);
+            const sessionSnap = await sessionRef.get();
+            if (!sessionSnap.exists) {
+                return {
+                    statusCode: 404,
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ error: 'Session not found' })
+                };
+            }
+
+            const sessionData = sessionSnap.data() || {};
+            if (sessionData.userId !== user.uid) {
+                return {
+                    statusCode: 403,
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ error: 'Forbidden' })
+                };
+            }
+
+            if (sessionData.status === 'active') {
+                await sessionRef.set({
+                    status: 'ended',
+                    endedAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true });
+            }
+
+            return {
+                statusCode: 200,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ok: true })
+            };
+        } catch (error) {
+            console.error('Vapi end session error:', error);
+            return {
+                statusCode: 500,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: 'Failed to end session', message: error.message })
+            };
+        }
     }
 
     // ===== CONTENT ENDPOINTS =====
@@ -460,11 +871,23 @@ exports.handler = async (event, context) => {
                 const voiceDocs = await voicesRef.where('name', '==', name).limit(1).get();
                 
                 if (!voiceDocs.empty) {
+                    const createdVoiceId = voiceDocs.docs[0].id;
+
                     await voiceDocs.docs[0].ref.update({
                         elevenlabsVoiceId: voiceId,
                         status: 'ready',
                         updatedAt: admin.firestore.FieldValue.serverTimestamp()
                     });
+
+                    // If the creator hasn't picked a default voice yet, default to their first ready voice.
+                    const userDoc = await db.collection('users').doc(user.uid).get();
+                    const userData = userDoc.exists ? userDoc.data() : {};
+                    if (!userData.defaultVoiceId) {
+                        await db.collection('users').doc(user.uid).set(
+                            { defaultVoiceId: createdVoiceId },
+                            { merge: true }
+                        );
+                    }
                 }
 
                 return {
